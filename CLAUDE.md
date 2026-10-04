@@ -11,11 +11,22 @@ Goal: resume centerpiece for **trading / fintech / low-latency firms**.
 
 ## Git workflow
 - One branch per phase (`phase-1-ring`, `phase-2-journal`, ...), merged to `main` by PR when the phase's "done when" check passes.
-- One commit = one task from the plan below. It compiles, tests pass, and it's small enough to explain.
-- Commit style: `feat(core): ...`, `test(core): ...`, `bench: ...`, `docs: ...`, `chore: ...`.
-- `mvn verify` must pass before every commit; CI runs the same.
+- One commit = one task from the plan below. It compiles and is small enough to explain.
+- Commit style: `feat(ring): ...`, `feat(journal): ...`, `bench: ...`, `docs: ...`, `chore: ...`.
+- `mvn package` must succeed before every commit; CI runs the same.
 - Measured numbers go into `docs/results.md` in the same commit as the benchmark.
 - Never commit secrets, `.env`, journal files or shared-memory files.
+
+## Project layout
+- **Two Maven modules** (chosen over five, to keep things simple):
+  - `agent-client`: the shared mailbox file format and writer, used by the separate simulator program. No dependencies.
+  - `pipeline`: everything else, depends on `agent-client`. Organized as packages: `ring`, `journal`, `processor`, `engine`, `storage`, `alerts`, `metrics`, `bench`.
+- The "Components" section below still uses the area names `core`, `engine`, `analyzer`, `bench`: these are packages inside `pipeline` now, except the shared mailbox format and writer, which live in `agent-client`.
+- Plain Java, no Spring Boot (full control over threads and memory; no web layer needed).
+
+## Testing (for now)
+- No unit-test suite for now (owner's choice): no JUnit, no `src/test`. Don't add tests unless asked.
+- Correctness is checked with small runnable checks (a `main` method or script): stress runs, crash tests, outage tests. "Test" in the plan below means one of these checks.
 
 ## Plan in plain words
 
@@ -36,7 +47,7 @@ Goal: resume centerpiece for **trading / fintech / low-latency firms**.
 ### Stages (following a log's journey)
 | Stage | What it does | Tasks (one commit each) | Works when |
 |---|---|---|---|
-| 0. Setup | Repo, folders, automatic checks, database | Charter files · 5 Maven modules + tests · GitHub Actions · ClickHouse in Docker + tables + diagram | CI is green |
+| 0. Setup | Repo, folders, automatic checks, database | Charter files · 2 Maven modules · GitHub Actions · ClickHouse in Docker + tables + diagram | CI is green |
 | 1. Logs enter | Simulator writes into the shared mailbox file; analyzer picks logs up | Mailbox file layout · writer (wait if full) · reader · several simulators, one file each · "your logs are saved" signal · connect the simulator · crash tests · *(optional)* one shared mailbox with variable-size logs | Several simulators, no missing or repeated logs |
 | 2. Conveyor belt | Passes each log between the analyzer's workers | Position counter · simple belt · several senders · several workers on the same slot · tiny-belt (8 slots) tests | No lost, repeated or out-of-order logs |
 | 3. Saved to disk | Journal | Journal file with log number + checksum · save many logs with one disk flush · new file when full, delete old ones · recovery after crash · crash test script | Force-kill test: zero lost logs |
@@ -149,7 +160,7 @@ A platform thread never calls `scope.join()` or blocking I/O. It calls `engine.s
 ## Technical phase plan
 | Phase | Steps (one commit each) | Done when |
 |---|---|---|
-| 0 Setup | 0.1 charter files · 0.2 Maven modules (`core`, `engine`, `agent-client`, `analyzer`, `bench`), JDK 26 + `--enable-preview`, JUnit 5 · 0.3 GitHub Actions CI · 0.4 Docker Compose (ClickHouse) + `clickhouse/init.sql` + `docs/architecture.md` | `mvn verify` green in CI |
+| 0 Setup | 0.1 charter files · 0.2 Maven modules (`agent-client`, `pipeline`), JDK 26 + `--enable-preview` · 0.3 GitHub Actions CI · 0.4 Docker Compose (ClickHouse) + `clickhouse/init.sql` + `docs/architecture.md` | `mvn package` green in CI |
 | 1 Ring + processor (3 wk) | 1.1 `Sequence` + wait strategies · 1.2 single-producer `RingBuffer` + `BatchConsumer` · 1.3 multi-producer CAS + batch claim + publish flags, 16-producer stress test · 1.4 consumer gating + slow-consumer checksum test · 1.5 `LatencyHistogram` + `AllocationMeter` · 1.6 `LogEvent` + byte-level `LogParser` + allocation test · 1.7 Drain tokenizer/masking/`TokenDictionary` · 1.8 Drain tree/templates · 1.9 `SlidingWindowCounter` + EWMA · 1.10 `Processor` end-to-end with in-JVM producer · 1.11 benchmarks: ring vs JDK queues, false sharing | 8-slot stress tests pass; < 1 B/event |
 | 2 Journal (2 wk) | 2.1 `JournalSegment` (mmap, CRC32) · 2.2 `Journaler` smart batching + durable sequence · 2.3 segment rolling + deletion below checkpoint · 2.4 recovery (CRC scan, truncate, replay) · 2.5 `scripts/crash-test.sh` · 2.6 smart-batching benchmark | `kill -9` under load: zero lost sequences |
 | 3 Shared memory (2 wk) | 3.1 simple shm file (header + fixed boxes) · 3.2 `ShmLogWriter` + `ShmRingReader`, two-JVM tests · 3.3 `ShmIngestBridge` over several files · 3.4 durable position in shm header · 3.5 connect the owner's simulator · 3.6 crash tests · 3.7 *(optional)* shared multi-writer file with variable records | Several writer processes, no loss/dupes, killed writer doesn't block |
@@ -212,7 +223,7 @@ FROM logs.events WHERE level IN ('ERROR','FATAL') GROUP BY service, template_id,
 | Durability | Own write-ahead journal: memory-mapped segments, CRC32, group commit |
 | Storage | ClickHouse over HTTP |
 | HTTP | JDK `HttpClient` |
-| Build / test | Maven 3.9 multi-module, JUnit 5 |
+| Build | Maven 3.9, two modules (`agent-client`, `pipeline`) |
 | Infra | Docker Compose (ClickHouse), GitHub Actions CI |
 | Measurement | Own latency histogram, `ThreadMXBean` allocation meter, `-Xlog:gc`, fixed-rate load generator |
 | Final runs | Rented Linux VM with `taskset` pinning |
