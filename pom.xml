@@ -18,6 +18,7 @@
         <!-- Preview features (StructuredTaskScope) only work with the JDK you compile on,
              so this must match the installed JDK. -->
         <java.release>26</java.release>
+        <disruptor.version>4.0.0</disruptor.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -27,6 +28,11 @@
                 <groupId>com.sarbar</groupId>
                 <artifactId>agent-client</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lmax</groupId>
+                <artifactId>disruptor</artifactId>
+                <version>${disruptor.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

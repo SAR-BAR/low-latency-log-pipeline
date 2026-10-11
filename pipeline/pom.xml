@@ -17,5 +17,10 @@
             <groupId>com.sarbar</groupId>
             <artifactId>agent-client</artifactId>
         </dependency>
+        <!-- In-process ring buffer (the conveyor belt) between the analyzer's worker threads. -->
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+        </dependency>
     </dependencies>
 </project>
