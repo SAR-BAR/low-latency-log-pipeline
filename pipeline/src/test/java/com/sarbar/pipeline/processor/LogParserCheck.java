@@ -35,7 +35,7 @@ public final class LogParserCheck {
 
     private static boolean checkCorrectness() {
         LogLineGenerator generator = new LogLineGenerator(SERVICES, 42);
-        ServiceRegistry registry = new ServiceRegistry(16);
+        NameRegistry registry = new NameRegistry(16);
         LogParser parser = new LogParser(registry);
         SplittableRandom random = new SplittableRandom(7);
         byte[] line = new byte[LogLineGenerator.MAX_LINE_BYTES];
@@ -75,7 +75,7 @@ public final class LogParserCheck {
                 "2026-10-11 08:41:12.556 [w] INFO svc missing dash",
                 "2026-10-11 08:41:12.556 [w] INFO svc -",
         };
-        LogParser parser = new LogParser(new ServiceRegistry(16));
+        LogParser parser = new LogParser(new NameRegistry(16));
         int failures = 0;
         for (String s : bad) {
             byte[] b = s.getBytes(StandardCharsets.US_ASCII);
@@ -100,7 +100,7 @@ public final class LogParserCheck {
         for (int i = 0; i < LINES; i++) {
             lengths[i] = generator.generate(lines[i], now + i, generator.randomService(), generator.randomLevel(5));
         }
-        LogParser parser = new LogParser(new ServiceRegistry(16));
+        LogParser parser = new LogParser(new NameRegistry(16));
 
         long checksum = 0;
         for (int round = 0; round < 200; round++) { // warm-up: give the JIT time to compile parse()

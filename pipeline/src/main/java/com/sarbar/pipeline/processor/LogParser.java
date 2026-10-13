@@ -18,14 +18,14 @@ public final class LogParser {
     private static final long MILLIS_PER_DAY = 86_400_000L;
     private static final int TIMESTAMP_LENGTH = 23; // "yyyy-MM-dd HH:mm:ss.SSS"
 
-    private final ServiceRegistry services;
+    private final NameRegistry services;
 
     private long timestampMillis;
     private int level;
     private int serviceId;
     private int messageOffset;
 
-    public LogParser(ServiceRegistry services) {
+    public LogParser(NameRegistry services) {
         this.services = services;
     }
 
@@ -83,7 +83,7 @@ public final class LogParser {
         return level;
     }
 
-    /** Id from the {@link ServiceRegistry}, or {@link ServiceRegistry#TOO_MANY}. */
+    /** Id from the {@link NameRegistry}, or {@link NameRegistry#TOO_MANY}. */
     public int serviceId() {
         return serviceId;
     }
