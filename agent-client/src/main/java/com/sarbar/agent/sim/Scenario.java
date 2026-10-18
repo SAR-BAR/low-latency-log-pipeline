@@ -19,7 +19,7 @@ public enum Scenario {
         return this == BURST && elapsedMillis % 10_000 < 1_000 ? 10.0 : 1.0;
     }
 
-    int errorPercent(long elapsedMillis, int serviceIndex) {
+    public int errorPercent(long elapsedMillis, int serviceIndex) {
         boolean spiking = this == ERROR_SPIKE && serviceIndex == 0 && elapsedMillis >= 30_000 && elapsedMillis < 50_000;
         return spiking ? SPIKE_ERROR_PERCENT : NORMAL_ERROR_PERCENT;
     }
