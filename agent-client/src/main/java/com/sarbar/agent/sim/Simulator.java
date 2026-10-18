@@ -1,32 +1,24 @@
 package com.sarbar.agent.sim;
 
+import com.sarbar.agent.shm.Mailbox;
+import com.sarbar.agent.shm.ShmLogWriter;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.locks.LockSupport;
 
-/**
- * One simulated application: produces log lines at a fixed rate and sends them to a sink.
- * Run several processes (different {@code source}) to simulate several applications.
- *
- * <p>Usage, all optional, as key=value:
- * <pre>
- * source=1 rate=10000 duration=60 scenario=steady|burst|error_spike out=-|path seed=42
- * </pre>
- * {@code out=-} writes to stdout.
- *
- * <p>Fixed rate: each line has a scheduled send time, start + n * interval. If the sink is slow
- * and the simulator falls behind, it does not skip lines; it sends the late ones immediately
- * until it catches up. Later, latency is measured from the scheduled time, so a stalled
- * pipeline shows up as high latency instead of being hidden.
- */
 public final class Simulator {
 
     private static final String[] SERVICES = {"payment-service", "auth-service", "order-service", "inventory-service"};
 
     /** Below this much remaining wait, spin instead of sleeping (sleep wake-up is too imprecise). */
     private static final long SPIN_THRESHOLD_NANOS = 100_000;
+
+    private static final int MAILBOX_BOXES = 4096;
+    private static final int MAILBOX_BOX_SIZE = 1024;
 
     public static void main(String[] args) throws IOException {
         Map<String, String> opts = parse(args);
@@ -37,12 +29,18 @@ public final class Simulator {
         String out = opts.getOrDefault("out", "-");
         long seed = Long.parseLong(opts.getOrDefault("seed", Long.toString(source)));
 
-        LogSink sink = new StreamLogSink(out.equals("-") ? System.out : new FileOutputStream(out, true));
+        LogSink sink = sink(out, source);
         System.err.printf("simulator source=%d rate=%.0f/s duration=%ds scenario=%s out=%s%n", source, rate, durationSeconds, scenario, out);
 
         long sent = run(new LogLineGenerator(SERVICES, seed), sink, scenario, rate, durationSeconds * 1_000_000_000L);
         sink.close();
         System.err.printf("simulator source=%d sent=%,d%n", source, sent);
+    }
+
+    private static LogSink sink(String out, int source) throws IOException {
+        if (out.equals("-")) return new StreamLogSink(System.out);
+        if (out.startsWith("shm:")) return new ShmLogWriter(Mailbox.file(Path.of(out.substring(4)), source), MAILBOX_BOXES, MAILBOX_BOX_SIZE);
+        return new StreamLogSink(new FileOutputStream(out, true));
     }
 
     /** @return how many lines were sent */

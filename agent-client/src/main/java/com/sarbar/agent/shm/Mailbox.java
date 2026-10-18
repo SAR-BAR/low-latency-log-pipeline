@@ -41,6 +41,11 @@ public final class Mailbox implements AutoCloseable {
         this.boxSize = boxSize;
     }
 
+    /** The mailbox file of one simulator inside the shared directory; the analyzer finds files by this name. */
+    public static Path file(Path directory, int sourceId) {
+        return directory.resolve("source-" + sourceId + ".shm");
+    }
+
     /** Creates a fresh mailbox file, replacing any old one. */
     public static Mailbox create(Path file, int boxCount, int boxSize) throws IOException {
         if (Integer.bitCount(boxCount) != 1) throw new IllegalArgumentException("boxCount must be a power of 2: " + boxCount);
