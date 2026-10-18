@@ -32,6 +32,7 @@ public final class LogEvent {
     private int serviceId;
     private int messageOffset;
     private int templateId;
+    private boolean errorSpike;
 
     /**
      * Copies a log line into this slot and clears the parsed fields left over from the previous lap.
@@ -55,15 +56,17 @@ public final class LogEvent {
         this.serviceId = UNPARSED;
         this.messageOffset = UNPARSED;
         this.templateId = UNPARSED;
+        this.errorSpike = false;
     }
 
     /** Called by the processor once it has parsed this log. */
-    public void setParsed(long timestampMillis, int level, int serviceId, int messageOffset, int templateId) {
+    public void setParsed(long timestampMillis, int level, int serviceId, int messageOffset, int templateId, boolean errorSpike) {
         this.timestampMillis = timestampMillis;
         this.level = level;
         this.serviceId = serviceId;
         this.messageOffset = messageOffset;
         this.templateId = templateId;
+        this.errorSpike = errorSpike;
     }
 
     /** The backing array; only the first {@link #length()} bytes belong to this log. Do not keep a reference. */
@@ -106,5 +109,10 @@ public final class LogEvent {
 
     public int templateId() {
         return templateId;
+    }
+
+    /** True if this log closed a second that was an error spike for its service. */
+    public boolean errorSpike() {
+        return errorSpike;
     }
 }
