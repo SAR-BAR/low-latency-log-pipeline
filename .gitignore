@@ -21,3 +21,6 @@ journal/
 # Secrets
 .env
 *.env
+
+# Runtime config (copy pipeline.properties.example)
+pipeline.properties
