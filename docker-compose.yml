@@ -1,6 +1,9 @@
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8-alpine
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
     ports:
       - "8123:8123"
       - "9000:9000"
