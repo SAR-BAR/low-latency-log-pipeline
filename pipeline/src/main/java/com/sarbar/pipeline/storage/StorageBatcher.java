@@ -7,6 +7,7 @@ import com.sarbar.pipeline.engine.LaneFullException;
 import com.sarbar.pipeline.ring.LogEvent;
 
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public final class StorageBatcher implements EventHandler<LogEvent> {
@@ -15,10 +16,12 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
     static final long FLUSH_INTERVAL_NANOS = 100_000_000L;
     static final long DEADLINE_SECONDS = 5;
     static final int POOL_SIZE = 3;
+    static final long RETRY_DELAY_MS = 1_000;
 
     private final Engine engine;
     private final BatchPool pool;
     private final Consumer<ColumnarBatch> insertJob;
+    private final AtomicInteger retryCount = new AtomicInteger();
     private ColumnarBatch batch;
 
     public StorageBatcher(Engine engine, Consumer<ColumnarBatch> insertJob) {
@@ -50,16 +53,62 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
 
     private void flush() throws InterruptedException {
         ColumnarBatch toSend = batch;
+        submitBatch(toSend);
+        batch = pool.acquire();
+    }
+
+    private void submitBatch(ColumnarBatch toSend) {
         try {
             engine.submit(Lane.STORAGE, Instant.now().plusSeconds(DEADLINE_SECONDS), () -> {
                 insertJob.accept(toSend);
                 return null;
-            }).whenComplete((result, error) -> pool.release(toSend));
+            }).whenComplete((result, error) -> {
+                if (error == null) {
+                    retryCount.decrementAndGet();
+                    pool.release(toSend);
+                } else {
+                    scheduleRetry(toSend);
+                }
+            });
+            retryCount.incrementAndGet();
         } catch (LaneFullException e) {
-            pool.release(toSend);
+            scheduleRetry(toSend);
         }
-        batch = pool.acquire();
+    }
+
+    private void scheduleRetry(ColumnarBatch batch) {
+        retryCount.incrementAndGet();
+        Thread.ofVirtual().name("batch-retry").start(() -> {
+            try {
+                Thread.sleep(RETRY_DELAY_MS);
+                engine.submit(Lane.STORAGE, Instant.now().plusSeconds(DEADLINE_SECONDS), () -> {
+                    insertJob.accept(batch);
+                    return null;
+                }).whenComplete((result, error) -> {
+                    retryCount.decrementAndGet();
+                    if (error == null) {
+                        pool.release(batch);
+                    } else {
+                        scheduleRetry(batch);
+                    }
+                });
+            } catch (LaneFullException e) {
+                retryCount.decrementAndGet();
+                scheduleRetry(batch);
+            } catch (InterruptedException ignored) {
+                retryCount.decrementAndGet();
+            }
+        });
+    }
+
+    public void close() {
+        if (batch != null && !batch.isEmpty()) {
+            submitBatch(batch);
+            batch = null;
+        }
     }
 
     public BatchPool pool() { return pool; }
+
+    public int retryCount() { return retryCount.get(); }
 }
