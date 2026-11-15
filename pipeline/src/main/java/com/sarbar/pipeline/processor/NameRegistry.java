@@ -30,6 +30,13 @@ public final class NameRegistry {
         this.names = new String[maxNames];
     }
 
+    public int registerReserved(String name) {
+        byte[] b = name.getBytes(StandardCharsets.US_ASCII);
+        nameBytes[count] = b;
+        names[count] = name;
+        return count++;
+    }
+
     /** The id for the ASCII name in {@code b[from, to)}, registering it if new; {@link #TOO_MANY} if full. */
     public int idOf(byte[] b, int from, int to) {
         for (int id = 0; id < count; id++) {

@@ -50,7 +50,7 @@ public final class BridgeCheck {
 
     public static void main(String[] args) throws Exception {
         Path dir = Files.createTempDirectory("bridge-check");
-        Processor processor = new Processor();
+        Processor processor = new Processor(1024, 4096);
         SourceVerifier verifier = new SourceVerifier();
         LogRing ring = new LogRing(1024, new YieldingWaitStrategy(), (e, s, b) -> { }, processor, verifier, (e, s, b) -> { });
         ring.start();

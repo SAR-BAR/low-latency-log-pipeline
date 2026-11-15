@@ -39,7 +39,7 @@ public final class PipelineConfig {
     public int alertDeadlineSeconds() { return getInt("alert.deadline.seconds", 3); }
     public int alertCooldownSeconds() { return getInt("alert.cooldown.seconds", 300); }
 
-    public int maxServices() { return getInt("max.services", 256); }
+    public int maxServices() { return getInt("max.services", 1024); }
     public int maxTemplates() { return getInt("max.templates", 10000); }
 
     private String get(String key, String defaultValue) {

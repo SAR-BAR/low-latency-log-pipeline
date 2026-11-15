@@ -126,7 +126,7 @@ public final class ProcessorCheck {
     }
 
     private static boolean checkPipeline() {
-        Processor processor = new Processor();
+        Processor processor = new Processor(1024, 4096);
         SlotVerifier verifier = new SlotVerifier(processor);
         SpikeRecorder spikes = new SpikeRecorder(processor);
         LogRing ring = new LogRing(RING_SIZE, new YieldingWaitStrategy(), (e, s, b) -> { }, processor, verifier, spikes);
@@ -171,7 +171,7 @@ public final class ProcessorCheck {
     }
 
     private static boolean checkAllocation() {
-        Processor processor = new Processor();
+        Processor processor = new Processor(1024, 4096);
         int n = 10_000;
         LogEvent[] events = new LogEvent[n];
         for (int i = 0; i < n; i++) {

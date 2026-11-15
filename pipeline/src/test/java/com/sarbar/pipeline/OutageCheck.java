@@ -39,7 +39,7 @@ public final class OutageCheck {
         System.out.println("[setup] ClickHouse is up. Events table truncated.\n");
 
         Engine engine = new Engine();
-        Processor processor = new Processor();
+        Processor processor = new Processor(1024, 10_000);
         CheckpointTracker checkpoint = new CheckpointTracker(64);
         Bulkhead bulkhead = new Bulkhead(8);
         Retry storageRetry = new Retry(3, 200, e -> e instanceof IOException);
@@ -51,7 +51,7 @@ public final class OutageCheck {
             } catch (Exception e) {
                 throw e instanceof RuntimeException re ? re : new RuntimeException(e);
             }
-        });
+        }, processor.unknownServiceId());
 
         Retry alertRetry = new Retry(2, 500, e -> e instanceof IOException);
         CircuitBreaker alertBreaker = new CircuitBreaker();

@@ -30,7 +30,7 @@ public final class StorageBatcherCheck {
         StorageBatcher batcher = new StorageBatcher(engine, batch -> {
             batchSizes.add(batch.count());
             flushed.countDown();
-        });
+        }, 0);
 
         LogRing ring = noOpRing(batcher);
         ring.start();
@@ -56,7 +56,7 @@ public final class StorageBatcherCheck {
         StorageBatcher batcher = new StorageBatcher(engine, batch -> {
             batchSizes.add(batch.count());
             flushed.countDown();
-        });
+        }, 0);
 
         LogRing ring = noOpRing(batcher);
         ring.start();
@@ -89,7 +89,7 @@ public final class StorageBatcherCheck {
             flushed.countDown();
             // hold the latch so the batch isn't released before we inspect it
             try { Thread.sleep(500); } catch (InterruptedException ignored) {}
-        });
+        }, 0);
 
         LogRing ring = noOpRing(batcher);
         ring.start();
@@ -122,7 +122,7 @@ public final class StorageBatcherCheck {
     }
 
     private static LogRing noOpRing(StorageBatcher batcher) {
-        return new LogRing(1024, new BusySpinWaitStrategy(), (e, s, b) -> {}, new com.sarbar.pipeline.processor.Processor(), batcher, (e, s, b) -> {});
+        return new LogRing(1024, new BusySpinWaitStrategy(), (e, s, b) -> {}, new com.sarbar.pipeline.processor.Processor(1024, 4096), batcher, (e, s, b) -> {});
     }
 
     private static byte[] makeLine(String s) {

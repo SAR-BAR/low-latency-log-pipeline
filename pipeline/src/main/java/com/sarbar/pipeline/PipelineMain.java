@@ -26,7 +26,7 @@ public final class PipelineMain {
                 : PipelineConfig.defaults();
 
         Engine engine = new Engine();
-        Processor processor = new Processor();
+        Processor processor = new Processor(config.maxServices(), config.maxTemplates());
 
         CheckpointTracker checkpoint = new CheckpointTracker(64);
 
@@ -45,7 +45,7 @@ public final class PipelineMain {
             } catch (Exception e) {
                 throw e instanceof RuntimeException re ? re : new RuntimeException(e);
             }
-        });
+        }, processor.unknownServiceId());
 
         Retry alertRetry = new Retry(2, 500, e -> e instanceof IOException);
         CircuitBreaker alertBreaker = new CircuitBreaker();
@@ -68,7 +68,8 @@ public final class PipelineMain {
             bridge.stop();
             try { bridgeThread.join(5000); } catch (InterruptedException ignored) {}
             ring.close();
-            engine.shutdown();
+            storageBatcher.close();
+            engine.shutdown(10_000);
             System.out.println("Shutdown complete.");
         }));
 

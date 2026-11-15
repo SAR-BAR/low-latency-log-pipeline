@@ -49,8 +49,22 @@ public final class Engine {
         return future;
     }
 
-    public void shutdown() {
+    public void shutdown() { shutdown(5_000); }
+
+    public void shutdown(long timeoutMs) {
         running = false;
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
+        while (System.nanoTime() < deadline) {
+            boolean idle = true;
+            for (AtomicInteger counter : inFlight) {
+                if (counter.get() > 0) { idle = false; break; }
+            }
+            if (idle) return;
+            try { Thread.sleep(50); } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 
     public int inFlight(Lane lane) {

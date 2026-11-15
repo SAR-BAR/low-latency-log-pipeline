@@ -4,6 +4,7 @@ import com.lmax.disruptor.EventHandler;
 import com.sarbar.pipeline.engine.Engine;
 import com.sarbar.pipeline.engine.Lane;
 import com.sarbar.pipeline.engine.LaneFullException;
+import com.sarbar.pipeline.processor.LogLevel;
 import com.sarbar.pipeline.ring.LogEvent;
 
 import java.time.Instant;
@@ -21,13 +22,15 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
     private final Engine engine;
     private final BatchPool pool;
     private final Consumer<ColumnarBatch> insertJob;
+    private final int unknownServiceId;
     private final AtomicInteger retryCount = new AtomicInteger();
     private ColumnarBatch batch;
 
-    public StorageBatcher(Engine engine, Consumer<ColumnarBatch> insertJob) {
+    public StorageBatcher(Engine engine, Consumer<ColumnarBatch> insertJob, int unknownServiceId) {
         this.engine = engine;
         this.pool = new BatchPool(POOL_SIZE, BATCH_SIZE);
         this.insertJob = insertJob;
+        this.unknownServiceId = unknownServiceId;
         try {
             this.batch = pool.acquire();
         } catch (InterruptedException e) {
@@ -38,9 +41,21 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
 
     @Override
     public void onEvent(LogEvent event, long sequence, boolean endOfBatch) throws Exception {
-        if (event.level() == LogEvent.UNPARSED) return;
+        long ts = event.timestampMillis();
+        int serviceId = event.serviceId();
+        int level = event.level();
+        int templateId = event.templateId();
+        int msgOffset = event.messageOffset();
 
-        batch.addRow(event.timestampMillis(), event.serviceId(), event.level(), event.templateId(), sequence, event.bytes(), event.messageOffset(), event.length());
+        if (level == LogEvent.UNPARSED) {
+            ts = System.currentTimeMillis();
+            serviceId = unknownServiceId;
+            level = LogLevel.INFO;
+            templateId = 0;
+            msgOffset = 0;
+        }
+
+        batch.addRow(ts, serviceId, level, templateId, sequence, event.bytes(), msgOffset, event.length());
 
         if (batch.isFull()) {
             flush();

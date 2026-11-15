@@ -5,11 +5,11 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class CheckpointTracker {
 
     private final AtomicLong checkpoint = new AtomicLong(-1);
-    private final long[] pending;
+    private long[] pending;
     private int pendingCount;
 
-    public CheckpointTracker(int maxPendingRanges) {
-        this.pending = new long[maxPendingRanges * 2];
+    public CheckpointTracker(int initialCapacity) {
+        this.pending = new long[initialCapacity * 2];
     }
 
     public synchronized void complete(long minSeq, long maxSeq) {
@@ -24,12 +24,20 @@ public final class CheckpointTracker {
     private void addRange(long min, long max) {
         if (pendingCount * 2 >= pending.length) {
             advance();
-            if (pendingCount * 2 >= pending.length) return;
+        }
+        if (pendingCount * 2 >= pending.length) {
+            grow();
         }
         int i = pendingCount * 2;
         pending[i] = min;
         pending[i + 1] = max;
         pendingCount++;
+    }
+
+    private void grow() {
+        long[] bigger = new long[pending.length * 2];
+        System.arraycopy(pending, 0, bigger, 0, pendingCount * 2);
+        pending = bigger;
     }
 
     private void advance() {

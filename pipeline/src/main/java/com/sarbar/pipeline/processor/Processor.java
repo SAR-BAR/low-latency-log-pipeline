@@ -6,20 +6,27 @@ import com.sarbar.pipeline.ring.LogEvent;
 /** Belt worker: parses each log, finds its template and tracks error spikes, writing the results into the slot. */
 public final class Processor implements EventHandler<LogEvent> {
 
-    static final int MAX_SERVICES = 1024;
     static final int MAX_WORDS = 4096;
-    static final int MAX_TEMPLATES = 4096;
     static final double SIMILARITY_THRESHOLD = 0.5;
     static final int MAX_GROUPS_PER_WORD_COUNT = 100;
     static final double SPIKE_FACTOR = 3.0;
     static final int MIN_SPIKE_ERRORS = 10;
 
-    private final NameRegistry services = new NameRegistry(MAX_SERVICES);
+    private final NameRegistry services;
     private final NameRegistry words = new NameRegistry(MAX_WORDS);
-    private final LogParser parser = new LogParser(services);
+    private final LogParser parser;
     private final MessageTokenizer tokenizer = new MessageTokenizer(words);
-    private final TemplateTree templates = new TemplateTree(MAX_TEMPLATES, SIMILARITY_THRESHOLD, MAX_GROUPS_PER_WORD_COUNT);
-    private final ErrorRateMonitor errors = new ErrorRateMonitor(MAX_SERVICES, SPIKE_FACTOR, MIN_SPIKE_ERRORS);
+    private final TemplateTree templates;
+    private final ErrorRateMonitor errors;
+    private final int unknownServiceId;
+
+    public Processor(int maxServices, int maxTemplates) {
+        this.services = new NameRegistry(maxServices);
+        this.unknownServiceId = services.registerReserved("UNKNOWN");
+        this.parser = new LogParser(services);
+        this.templates = new TemplateTree(maxTemplates, SIMILARITY_THRESHOLD, MAX_GROUPS_PER_WORD_COUNT);
+        this.errors = new ErrorRateMonitor(maxServices, SPIKE_FACTOR, MIN_SPIKE_ERRORS);
+    }
     private long malformed;
 
     @Override
@@ -50,6 +57,10 @@ public final class Processor implements EventHandler<LogEvent> {
 
     public ErrorRateMonitor errors() {
         return errors;
+    }
+
+    public int unknownServiceId() {
+        return unknownServiceId;
     }
 
     public long malformedCount() {
