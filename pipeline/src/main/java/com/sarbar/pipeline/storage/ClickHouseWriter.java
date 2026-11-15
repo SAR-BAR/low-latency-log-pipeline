@@ -15,14 +15,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 public final class ClickHouseWriter {
 
     private static final String[] LEVEL_NAMES = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
     private static final DateTimeFormatter TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
 
+    private final String instanceId = UUID.randomUUID().toString().substring(0, 8);
     private final HttpClient http;
-    private final URI insertEventsUri;
+    private final String insertEventsBase;
     private final URI insertTemplatesUri;
     private final Bulkhead bulkhead;
     private final Retry retry;
@@ -36,7 +38,7 @@ public final class ClickHouseWriter {
 
     public ClickHouseWriter(String baseUrl, Bulkhead bulkhead, Retry retry, CircuitBreaker breaker, NameRegistry serviceNames, TemplateTree templateTree, NameRegistry words, CheckpointTracker checkpoint, int maxTemplates) {
         this.http = HttpClient.newBuilder().build();
-        this.insertEventsUri = URI.create(baseUrl + "/?query=" + encode("INSERT INTO logs.events FORMAT TabSeparated"));
+        this.insertEventsBase = baseUrl + "/?query=" + encode("INSERT INTO logs.events FORMAT TabSeparated");
         this.insertTemplatesUri = URI.create(baseUrl + "/?query=" + encode("INSERT INTO logs.templates FORMAT TabSeparated"));
         this.bulkhead = bulkhead;
         this.retry = retry;
@@ -49,13 +51,14 @@ public final class ClickHouseWriter {
     }
 
     public void insertBatch(ColumnarBatch batch) throws Exception {
-        String dedupToken = batch.dedupToken();
+        String dedupToken = batch.dedupToken(instanceId);
         byte[] body = formatEvents(batch);
         long minSeq = batch.sequence(0);
         long maxSeq = batch.sequence(batch.count() - 1);
+        URI uri = URI.create(insertEventsBase + "&insert_deduplication_token=" + encode(dedupToken));
 
-        bulkhead.call(() -> retry.call(() -> breaker.call(() -> {
-            post(insertEventsUri, body, dedupToken);
+        retry.call(() -> bulkhead.call(() -> breaker.call(() -> {
+            post(uri, body);
             return null;
         })));
 
@@ -102,19 +105,17 @@ public final class ClickHouseWriter {
         if (sb == null) return;
         byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);
         try {
-            post(insertTemplatesUri, body, null);
+            post(insertTemplatesUri, body);
         } catch (Exception e) {
         }
     }
 
-    private void post(URI uri, byte[] body, String dedupToken) throws IOException, InterruptedException {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
+    private void post(URI uri, byte[] body) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(uri)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-                .header("Content-Type", "text/plain");
-        if (dedupToken != null) {
-            builder.header("X-ClickHouse-Deduplication-Id", dedupToken);
-        }
-        HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+                .header("Content-Type", "text/plain")
+                .build();
+        HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
             throw new IOException("ClickHouse returned " + response.statusCode() + ": " + response.body());
         }

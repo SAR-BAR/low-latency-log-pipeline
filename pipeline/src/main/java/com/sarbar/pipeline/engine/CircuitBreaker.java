@@ -1,6 +1,7 @@
 package com.sarbar.pipeline.engine;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class CircuitBreaker {
 
@@ -15,7 +16,7 @@ public final class CircuitBreaker {
     private final AtomicInteger[] failures;
     private volatile long currentSecond;
 
-    private volatile State state = State.CLOSED;
+    private final AtomicReference<State> state = new AtomicReference<>(State.CLOSED);
     private volatile long openedAtNanos;
 
     public CircuitBreaker(int windowSeconds, double failureThreshold, int minimumCalls, long openDurationMs) {
@@ -50,21 +51,16 @@ public final class CircuitBreaker {
     }
 
     public State state() {
-        if (state == State.OPEN && System.nanoTime() - openedAtNanos >= openDurationNanos) {
-            state = State.HALF_OPEN;
+        if (state.get() == State.OPEN && System.nanoTime() - openedAtNanos >= openDurationNanos) {
+            state.compareAndSet(State.OPEN, State.HALF_OPEN);
         }
-        return state;
+        return state.get();
     }
 
     boolean tryAcquire() {
         return switch (state()) {
             case CLOSED -> true;
-            case HALF_OPEN -> {
-                state = State.OPEN;
-                openedAtNanos = System.nanoTime();
-                state = State.HALF_OPEN;
-                yield true;
-            }
+            case HALF_OPEN -> state.compareAndSet(State.HALF_OPEN, State.OPEN);
             case OPEN -> false;
         };
     }
@@ -72,20 +68,20 @@ public final class CircuitBreaker {
     void recordSuccess() {
         advance();
         successes[slot()].incrementAndGet();
-        if (state == State.HALF_OPEN) {
+        if (state.compareAndSet(State.OPEN, State.CLOSED)) {
             resetBuckets();
-            state = State.CLOSED;
         }
     }
 
     void recordFailure() {
         advance();
         failures[slot()].incrementAndGet();
-        if (state == State.HALF_OPEN) {
-            trip();
+        State s = state.get();
+        if (s == State.OPEN) {
+            openedAtNanos = System.nanoTime();
             return;
         }
-        if (state == State.CLOSED && shouldTrip()) trip();
+        if (s == State.CLOSED && shouldTrip()) trip();
     }
 
     private boolean shouldTrip() {
@@ -100,7 +96,7 @@ public final class CircuitBreaker {
     }
 
     private void trip() {
-        state = State.OPEN;
+        state.set(State.OPEN);
         openedAtNanos = System.nanoTime();
     }
 

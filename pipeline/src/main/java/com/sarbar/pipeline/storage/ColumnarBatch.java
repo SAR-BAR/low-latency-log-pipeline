@@ -51,7 +51,7 @@ public final class ColumnarBatch {
     public long sequence(int i) { return sequences[i]; }
     public byte[] message(int i) { return messages[i]; }
 
-    public String dedupToken() {
-        return "batch-" + sequences[0] + "-" + sequences[count - 1];
+    public String dedupToken(String instanceId) {
+        return instanceId + "-" + sequences[0] + "-" + sequences[count - 1];
     }
 }

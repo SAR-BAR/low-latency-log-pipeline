@@ -10,7 +10,8 @@ CREATE TABLE logs.events (
 ) ENGINE = MergeTree
 PARTITION BY toDate(ts)
 ORDER BY (service, ts)
-TTL toDateTime(ts) + INTERVAL 7 DAY;
+TTL toDateTime(ts) + INTERVAL 7 DAY
+SETTINGS non_replicated_deduplication_window = 100;
 
 CREATE TABLE logs.templates (
     template_id UInt32,

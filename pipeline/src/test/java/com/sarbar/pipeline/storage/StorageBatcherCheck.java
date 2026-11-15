@@ -116,8 +116,10 @@ public final class StorageBatcherCheck {
         batch.addRow(0, 0, 2, 0, 100, line, 51, line.length);
         batch.addRow(0, 0, 2, 0, 101, line, 51, line.length);
         batch.addRow(0, 0, 2, 0, 102, line, 51, line.length);
-        String token = batch.dedupToken();
-        check(token.equals("batch-100-102"), "dedup: expected 'batch-100-102', got '" + token + "'");
+        String token = batch.dedupToken("abc123");
+        check(token.equals("abc123-100-102"), "dedup: expected 'abc123-100-102', got '" + token + "'");
+        String token2 = batch.dedupToken("xyz789");
+        check(token2.equals("xyz789-100-102"), "dedup: different instance should give different token, got '" + token2 + "'");
         System.out.println("[PASS] dedup token");
     }
 
