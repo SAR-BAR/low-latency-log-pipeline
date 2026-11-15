@@ -102,7 +102,7 @@ public final class StorageBatcherCheck {
         check(flushed.await(5, TimeUnit.SECONDS), "contents: batch should have flushed");
         ColumnarBatch b = captured[0];
         check(b.level(0) == 4, "contents: level should be ERROR (4), got " + b.level(0));
-        String msg = new String(b.message(0), StandardCharsets.UTF_8);
+        String msg = new String(b.messageBuffer(), b.messageOffset(0), b.messageLength(0), StandardCharsets.UTF_8);
         check(msg.equals("db connection lost"), "contents: message should be 'db connection lost', got '" + msg + "'");
         ring.close();
         engine.shutdown();

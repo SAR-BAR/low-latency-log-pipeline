@@ -6,10 +6,12 @@ import com.sarbar.pipeline.ring.LogRing;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.locks.LockSupport;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,13 +25,13 @@ public final class ShmIngestBridge implements Runnable {
     private static final long RESCAN_NANOS = 1_000_000_000L;
     private static final long IDLE_NANOS = 10_000;
 
-    private record Source(int id, MailboxReader reader, MailboxReader.Handler handler) {
+    private record Source(int id, MailboxReader reader, MailboxReader.Handler handler, FileTime createdAt) {
     }
 
     private final Path directory;
     private final LogRing ring;
     private final List<Source> sources = new ArrayList<>();
-    private final Set<Integer> knownIds = new HashSet<>();
+    private final Map<Integer, FileTime> knownIds = new HashMap<>();
     private volatile boolean running = true;
 
     public ShmIngestBridge(Path directory, LogRing ring) {
@@ -73,17 +75,38 @@ public final class ShmIngestBridge implements Runnable {
                 Matcher m = FILE_NAME.matcher(file.getFileName().toString());
                 if (!m.matches()) continue;
                 int id = Integer.parseInt(m.group(1));
-                if (knownIds.contains(id)) continue;
+                FileTime createdAt;
+                try {
+                    createdAt = Files.readAttributes(file, BasicFileAttributes.class).creationTime();
+                } catch (IOException e) {
+                    continue;
+                }
+                FileTime known = knownIds.get(id);
+                if (known != null && known.equals(createdAt)) continue;
+                if (known != null) {
+                    removeSource(id);
+                }
                 try {
                     MailboxReader reader = new MailboxReader(file);
-                    sources.add(new Source(id, reader, (bytes, length, sequence) -> ring.publish(bytes, 0, length, id, sequence)));
-                    knownIds.add(id);
+                    sources.add(new Source(id, reader, (bytes, length, sequence) -> ring.publish(bytes, 0, length, id, sequence), createdAt));
+                    knownIds.put(id, createdAt);
                 } catch (IOException notReadyYet) {
                     // the simulator is still creating the file; try again on the next scan
                 }
             }
         } catch (IOException e) {
             // directory missing or unreadable: no simulators yet
+        }
+    }
+
+    private void removeSource(int id) {
+        for (int i = 0; i < sources.size(); i++) {
+            if (sources.get(i).id() == id) {
+                sources.get(i).reader().close();
+                sources.remove(i);
+                knownIds.remove(id);
+                return;
+            }
         }
     }
 }

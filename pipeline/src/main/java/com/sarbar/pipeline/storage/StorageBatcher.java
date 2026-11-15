@@ -24,6 +24,8 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
     private final Consumer<ColumnarBatch> insertJob;
     private final int unknownServiceId;
     private final AtomicInteger retryCount = new AtomicInteger();
+    private final Object lock = new Object();
+    private volatile boolean running = true;
     private ColumnarBatch batch;
 
     public StorageBatcher(Engine engine, Consumer<ColumnarBatch> insertJob, int unknownServiceId) {
@@ -37,6 +39,7 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
         }
+        Thread.ofVirtual().name("batch-flush-timer").start(this::flushTimer);
     }
 
     @Override
@@ -55,14 +58,35 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
             msgOffset = 0;
         }
 
-        batch.addRow(ts, serviceId, level, templateId, sequence, event.bytes(), msgOffset, event.length());
+        synchronized (lock) {
+            batch.addRow(ts, serviceId, level, templateId, sequence, event.bytes(), msgOffset, event.length());
 
-        if (batch.isFull()) {
-            flush();
-            return;
+            if (batch.isFull()) {
+                flush();
+                return;
+            }
+            if (endOfBatch && !batch.isEmpty() && System.nanoTime() - batch.firstAddedNanos() >= FLUSH_INTERVAL_NANOS) {
+                flush();
+            }
         }
-        if (endOfBatch && !batch.isEmpty() && System.nanoTime() - batch.firstAddedNanos() >= FLUSH_INTERVAL_NANOS) {
-            flush();
+    }
+
+    private void flushTimer() {
+        while (running) {
+            try {
+                Thread.sleep(FLUSH_INTERVAL_NANOS / 1_000_000);
+            } catch (InterruptedException e) {
+                return;
+            }
+            synchronized (lock) {
+                if (!batch.isEmpty() && System.nanoTime() - batch.firstAddedNanos() >= FLUSH_INTERVAL_NANOS) {
+                    try {
+                        flush();
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }
         }
     }
 
@@ -117,9 +141,12 @@ public final class StorageBatcher implements EventHandler<LogEvent> {
     }
 
     public void close() {
-        if (batch != null && !batch.isEmpty()) {
-            submitBatch(batch);
-            batch = null;
+        running = false;
+        synchronized (lock) {
+            if (batch != null && !batch.isEmpty()) {
+                submitBatch(batch);
+                batch = null;
+            }
         }
     }
 

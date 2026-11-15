@@ -79,7 +79,7 @@ public final class ClickHouseWriter {
             sb.append('\t');
             sb.append(batch.sequence(i));
             sb.append('\t');
-            appendEscaped(sb, batch.message(i));
+            appendEscaped(sb, batch.messageBuffer(), batch.messageOffset(i), batch.messageLength(i));
             sb.append('\n');
         }
         return sb.toString().getBytes(StandardCharsets.UTF_8);
@@ -97,7 +97,8 @@ public final class ClickHouseWriter {
             sb.append('\t');
             sb.append(serviceNames.name(batch.serviceId(i)));
             sb.append('\t');
-            appendEscaped(sb, templateTree.text(tid, words).getBytes(StandardCharsets.UTF_8));
+            byte[] tpl = templateTree.text(tid, words).getBytes(StandardCharsets.UTF_8);
+            appendEscaped(sb, tpl, 0, tpl.length);
             sb.append('\t');
             sb.append(now);
             sb.append('\n');
@@ -126,9 +127,9 @@ public final class ClickHouseWriter {
         return "INFO";
     }
 
-    private static void appendEscaped(StringBuilder sb, byte[] bytes) {
-        for (byte b : bytes) {
-            char c = (char) (b & 0xFF);
+    private static void appendEscaped(StringBuilder sb, byte[] buf, int off, int len) {
+        for (int i = off; i < off + len; i++) {
+            char c = (char) (buf[i] & 0xFF);
             if (c == '\t') { sb.append("\\t"); }
             else if (c == '\n') { sb.append("\\n"); }
             else if (c == '\\') { sb.append("\\\\"); }
